@@ -123,7 +123,7 @@ class PipelineWorker(QThread):
                     target_key = params.get("target", "Original")
                     enriched["_target_image"] = (
                         self._image if target_key == "Original"
-                        else (results[-1] if results else self._image)
+                        else (results[-2] if len(results) >= 2 else self._image)
                     )
                 current = apply_filter(current, alg_id, enriched)
             except Exception as e:
@@ -1030,6 +1030,9 @@ class MainWindow(QMainWindow):
             "Select 'Noise' category, then click + to add noise",
             self._view_group)
         self._noise_row.pipeline_changed.connect(self._run_noise)
+        self._noise_row.view_requested.connect(
+            lambda _: self._on_noise_results([it["result"] for it in self._noise_row.pipeline])
+        )
         nc_lay.addWidget(self._noise_row)
         nt_lay.addWidget(noise_card)
         self._noise_summary = SummaryBar("Noise")
@@ -1059,6 +1062,9 @@ class MainWindow(QMainWindow):
             "Select a category, then click + to add a filter",
             self._view_group)
         self._filter_row.pipeline_changed.connect(self._run_filters)
+        self._filter_row.view_requested.connect(
+            lambda _: self._on_filter_results([it["result"] for it in self._filter_row.pipeline])
+        )
         fc_lay.addWidget(self._filter_row)
         ft_lay.addWidget(filter_card)
         self._filter_summary = SummaryBar("Filters")
@@ -1272,8 +1278,18 @@ class MainWindow(QMainWindow):
         self._noisy_image = noisy
         self._img_noisy.set_image(noisy)
         self._hist_noisy.plot(noisy)
-        names = " + ".join(it["model"].name for it in self._noise_row.pipeline)
-        self._noise_col_lbl.setText(f"Noisy — {names}")
+
+        if self._noise_row.view_level_uid:
+            for it in self._noise_row.pipeline:
+                if it["uid"] == self._noise_row.view_level_uid:
+                    self._noise_col_lbl.setText(f"Noisy — {it['model'].name}")
+                    break
+        else:
+            names = " + ".join(it["model"].name for it in self._noise_row.pipeline)
+            if names:
+                self._noise_col_lbl.setText(f"Noisy — {names}")
+            else:
+                self._noise_col_lbl.setText("Noisy Image")
         self._noise_summary.update_pipeline(self._noise_row.pipeline)
         if self._noise_pending:
             self._noise_pending = False
